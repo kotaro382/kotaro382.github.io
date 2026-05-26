@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>美術クイズ — シュレーダー邸</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", Roboto, "Helvetica Neue", Arial; line-height:1.6; padding:24px; background:#f7f7fb; color:#111; }
+    .card { background:#fff; border-radius:8px; padding:20px; box-shadow:0 6px 18px rgba(20,20,50,0.06); max-width:900px; margin:0 auto; }
+    h1 { margin:0 0 12px 0; font-size:20px; }
+    p.lead { margin:0 0 18px 0; color:#444; }
+    .sentence { font-size:18px; margin:18px 0; }
+    select { font-size:16px; padding:6px 8px; border-radius:6px; border:1px solid #cfcfe6; background:#fff; }
+    .controls { margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; }
+    button { padding:8px 12px; border-radius:8px; border:0; cursor:pointer; font-weight:600; }
+    button.primary { background:#2563eb; color:#fff; }
+    button.ghost { background:#eef2ff; color:#1f2937; }
+    .result { margin-top:14px; font-weight:700; }
+    .feedback { display:inline-block; margin-left:10px; padding:4px 8px; border-radius:6px; font-weight:700; }
+    .correct { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+    .wrong { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+    .explain { margin-top:12px; color:#374151; }
+    .small { font-size:13px; color:#6b7280; }
+  </style>
+</head>
+<body>
+  <div class="card" role="main">
+    <h1>美術クイズ — シュレーダー邸（穴あき選択）</h1>
+    <p class="lead">括弧の中を選択問題にした例です。選択肢は毎回ランダムに並び替えられます。</p>
+
+    <div class="sentence" id="quiz-sentence">
+      シュレーダー邸（
+      <select id="q1" data-key="G.T.リートフェルト"></select>
+      ）は、明確な幾何学形態や空間を実現しようとする造形運動「
+      <select id="q2" data-key="デ・ステイル"></select>
+      」の構成原理に基づき、（
+      <select id="q3" data-key="無彩色"></select>
+      ）と青・赤・黄の三原色とで鮮やかに彩られた面と線の要素が組合わされている。（
+      <select id="q4" data-key="可動の間仕切り"></select>
+      ）により4つの区画に分割することができる。
+    </div>
+
+    <div class="controls">
+      <button class="primary" id="checkBtn">答え合わせ</button>
+      <button class="ghost" id="shuffleBtn">シャッフル</button>
+      <button class="ghost" id="showAllBtn">正解を表示</button>
+    </div>
+
+    <div class="result" id="resultArea" aria-live="polite"></div>
+    <div class="explain small" id="explainArea"></div>
+  </div>
+
+  <script>
+    // 各空欄の正解と誤答候補
+    const items = {
+      q1: {
+        correct: "G.T.リートフェルト",
+        distractors: ["ル・コルビュジエ", "フランク・ロイド・ライト", "ミース・ファン・デル・ローエ"]
+      },
+      q2: {
+        correct: "デ・ステイル",
+        distractors: ["バウハウス", "アール・ヌーヴォー", "シュルレアリスム"]
+      },
+      q3: {
+        correct: "無彩色",
+        distractors: ["暖色系", "寒色系", "中間色"]
+      },
+      q4: {
+        correct: "可動の間仕切り",
+        distractors: ["固定壁", "ガラスカーテンウォール", "吹き抜け"]
+      }
+    };
+
+    // シャッフル関数
+    function shuffleArray(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // セレクトを作る
+    function populateSelect(id) {
+      const el = document.getElementById(id);
+      const data = items[id];
+      const options = [data.correct, ...data.distractors];
+      shuffleArray(options);
+      el.innerHTML = "";
+      // 空の先頭選択肢
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "（選択してください）";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      el.appendChild(placeholder);
+      options.forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        el.appendChild(o);
+      });
+      // store correct answer for checking
+      el.dataset.correct = data.correct;
+    }
+
+    // 初期化
+    function init() {
+      populateSelect("q1");
+      populateSelect("q2");
+      populateSelect("q3");
+      populateSelect("q4");
+      document.getElementById("resultArea").textContent = "";
+      document.getElementById("explainArea").textContent = "";
+    }
+
+    // 答え合わせ
+    function checkAnswers() {
+      const ids = ["q1","q2","q3","q4"];
+      let correctCount = 0;
+      const explainParts = [];
+      ids.forEach(id => {
+        const sel = document.getElementById(id);
+        const chosen = sel.value;
+        const correct = sel.dataset.correct;
+        // remove previous feedback style
+        sel.classList.remove("correct","wrong");
+        // create inline feedback element
+        const existing = sel.nextElementSibling;
+        if (existing && existing.classList.contains("feedback")) existing.remove();
+
+        const fb = document.createElement("span");
+        fb.className = "feedback";
+        if (chosen === correct) {
+          correctCount++;
+          fb.textContent = "正解";
+          fb.classList.add("correct");
+        } else {
+          fb.textContent = "不正解";
+          fb.classList.add("wrong");
+        }
+        sel.after(fb);
+
+        explainParts.push(`${id}：あなたの選択「${chosen || "未選択"}」 → 正解「${correct}」`);
+      });
+
+      const scoreText = `正解数： ${correctCount} / 4`;
+      document.getElementById("resultArea").textContent = scoreText;
+      document.getElementById("explainArea").innerText = explainParts.join("\n");
+    }
+
+    // 正解を表示（選択肢を正解に切り替える）
+    function showAllAnswers() {
+      ["q1","q2","q3","q4"].forEach(id => {
+        const sel = document.getElementById(id);
+        sel.value = sel.dataset.correct;
+      });
+      // すぐに答え合わせ表示
+      checkAnswers();
+    }
+
+    // イベント
+    document.getElementById("checkBtn").addEventListener("click", checkAnswers);
+    document.getElementById("shuffleBtn").addEventListener("click", () => {
+      init();
+    });
+    document.getElementById("showAllBtn").addEventListener("click", showAllAnswers);
+
+    // 初回ロード
+    init();
+  </script>
+</body>
+</html>
