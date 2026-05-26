@@ -3,26 +3,438 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>美術クイズ ? シュレーダー邸</title>
+  <title>Quiz App</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", Roboto, "Helvetica Neue", Arial; line-height:1.6; padding:24px; background:#f7f7fb; color:#111; }
-    .card { background:#fff; border-radius:8px; padding:20px; box-shadow:0 6px 18px rgba(20,20,50,0.06); max-width:900px; margin:0 auto; }
-    h1 { margin:0 0 12px 0; font-size:20px; }
-    p.lead { margin:0 0 18px 0; color:#444; }
-    .sentence { font-size:18px; margin:18px 0; }
-    select { font-size:16px; padding:6px 8px; border-radius:6px; border:1px solid #cfcfe6; background:#fff; }
-    .controls { margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; }
-    button { padding:8px 12px; border-radius:8px; border:0; cursor:pointer; font-weight:600; }
-    button.primary { background:#2563eb; color:#fff; }
-    button.ghost { background:#eef2ff; color:#1f2937; }
-    .result { margin-top:14px; font-weight:700; }
-    .feedback { display:inline-block; margin-left:10px; padding:4px 8px; border-radius:6px; font-weight:700; }
-    .correct { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
-    .wrong { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-    .explain { margin-top:12px; color:#374151; }
-    .small { font-size:13px; color:#6b7280; }
+    :root{--bg:#f7f8fb;--card:#fff;--accent:#2563eb;--muted:#6b7280}
+    body{font-family:system-ui,-apple-system,"Noto Sans JP",Roboto,Arial;background:var(--bg);margin:0;padding:24px;color:#111}
+    .wrap{max-width:980px;margin:0 auto}
+    .card{background:var(--card);border-radius:10px;padding:18px;box-shadow:0 6px 18px rgba(20,20,50,0.06);margin-bottom:18px}
+    h1{margin:0 0 8px 0;font-size:20px}
+    label{display:block;margin:8px 0 6px 0;font-weight:700}
+    select,input,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e7ee;font-size:15px}
+    button{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+    button.ghost{background:#eef2ff;color:#1f2937}
+    .row{display:flex;gap:10px}
+    .col{flex:1}
+    .small{font-size:13px;color:var(--muted)}
+    .list{margin:8px 0;padding:0;list-style:none}
+    .list li{padding:8px;border-radius:8px;border:1px solid #eef2ff;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .question{margin:10px 0}
+    .choice{display:block;margin:6px 0}
+    .result{font-weight:800;margin-top:10px}
+    pre{background:#0f1724;color:#e6eef8;padding:10px;border-radius:8px;overflow:auto}
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Quiz Hub</h1>
+      <p class="small">ジャンルを選んで問題数を指定し「クイズを開始」してください。作成・保存も可能です。</p>
+    </div>
+
+    <div class="card" id="mainControls">
+      <label>ジャンル</label>
+      <select id="genreSelect"></select>
+
+      <label>問題数</label>
+      <select id="countSelect">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+      </select>
+
+      <div style="margin-top:10px" class="row">
+        <button id="startBtn">クイズを開始</button>
+        <button id="refreshBtn" class="ghost">一覧を更新</button>
+        <button id="newBtn" class="ghost">新しいクイズを作る</button>
+      </div>
+    </div>
+
+    <div class="card" id="quizListCard">
+      <h2 style="margin-top:0">公開クイズ一覧</h2>
+      <ul id="quizList" class="list"></ul>
+      <div class="small">※ クイズは Supabase に保存されます</div>
+    </div>
+
+    <div class="card" id="creatorCard" style="display:none">
+      <h2 style="margin-top:0">クイズ作成</h2>
+      <label>クイズタイトル</label>
+      <input id="quizTitle" placeholder="例：シュレーダー邸クイズ" />
+
+      <label>ジャンル</label>
+      <input id="quizGenre" placeholder="例：建築史" />
+
+      <label>問題（最低1問）</label>
+      <div id="questionsContainer"></div>
+
+      <div style="margin-top:8px" class="row">
+        <button id="addQuestionBtn" class="ghost">問題を追加</button>
+        <button id="saveQuizBtn">保存して公開</button>
+        <button id="cancelCreateBtn" class="ghost">キャンセル</button>
+      </div>
+
+      <div class="small" style="margin-top:8px">選択肢はカンマ区切りで入力してください。正解は0始まりのインデックスで指定します。</div>
+    </div>
+
+    <div class="card" id="playCard" style="display:none">
+      <h2 id="playTitle" style="margin-top:0">クイズ</h2>
+      <div id="questionsArea"></div>
+      <div class="row" style="margin-top:12px">
+        <button id="submitAnswersBtn">回答を送信</button>
+        <button id="backBtn" class="ghost">戻る</button>
+      </div>
+      <div id="playResult" class="result"></div>
+    </div>
+
+    <div class="card" id="debugCard">
+      <h2 style="margin-top:0">Supabase 設定（プレースホルダ）</h2>
+      <div class="small">以下を Supabase の値に置き換えてください</div>
+      <pre id="supabasePlaceholders">SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_ANON_KEY = "public-anon-key"</pre>
+      <div class="small" style="margin-top:8px">Supabase のテーブル定義と RLS の例はページ下部に記載しています</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Supabase テーブル例と RLS（コピーして SQL 実行）</h2>
+      <pre>
+-- quizzes テーブル
+create table quizzes (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  genre text not null,
+  created_at timestamptz default now()
+);
+
+-- questions テーブル
+create table questions (
+  id uuid primary key default gen_random_uuid(),
+  quiz_id uuid references quizzes(id) on delete cascade,
+  text text not null,
+  choices jsonb not null, -- ["選択肢A","選択肢B",...]
+  answer_index int not null,
+  created_at timestamptz default now()
+);
+
+-- results テーブル
+create table results (
+  id uuid primary key default gen_random_uuid(),
+  quiz_id uuid references quizzes(id),
+  score int,
+  total int,
+  created_at timestamptz default now()
+);
+
+-- RLS の簡易例（公開読み取り、書き込みは制限）
+-- quizzes
+alter table quizzes enable row level security;
+create policy "public_select" on quizzes for select using (true);
+
+-- questions
+alter table questions enable row level security;
+create policy "public_select" on questions for select using (true);
+
+-- results
+alter table results enable row level security;
+create policy "insert_results" on results for insert using (true) with check (true);
+create policy "select_results" on results for select using (true);
+      </pre>
+      <div class="small">注：学習用途であれば上の簡易ポリシーで始められますが、公開書き込みを制限したい場合は認証を使ってポリシーを厳しくしてください</div>
+    </div>
+  </div>
+
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <script>
+    // ====== ここを Supabase の値に置き換えてください ======
+    const SUPABASE_URL = "https://your-project.supabase.co";
+    const SUPABASE_ANON_KEY = "public-anon-key";
+    // ====================================================
+    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // UI 要素
+    const genreSelect = document.getElementById("genreSelect");
+    const countSelect = document.getElementById("countSelect");
+    const startBtn = document.getElementById("startBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const quizList = document.getElementById("quizList");
+    const newBtn = document.getElementById("newBtn");
+    const creatorCard = document.getElementById("creatorCard");
+    const mainControls = document.getElementById("mainControls");
+    const questionsContainer = document.getElementById("questionsContainer");
+    const addQuestionBtn = document.getElementById("addQuestionBtn");
+    const saveQuizBtn = document.getElementById("saveQuizBtn");
+    const cancelCreateBtn = document.getElementById("cancelCreateBtn");
+    const quizTitle = document.getElementById("quizTitle");
+    const quizGenre = document.getElementById("quizGenre");
+    const playCard = document.getElementById("playCard");
+    const playTitle = document.getElementById("playTitle");
+    const questionsArea = document.getElementById("questionsArea");
+    const submitAnswersBtn = document.getElementById("submitAnswersBtn");
+    const backBtn = document.getElementById("backBtn");
+    const playResult = document.getElementById("playResult");
+    const supabasePlaceholders = document.getElementById("supabasePlaceholders");
+
+    // 初期化
+    supabasePlaceholders.textContent = `SUPABASE_URL = "${SUPABASE_URL}"\nSUPABASE_ANON_KEY = "${SUPABASE_ANON_KEY}"`;
+
+    async function loadGenresAndList() {
+      // ジャンル一覧を quizzes テーブルから取得（distinct）
+      const { data: genres } = await supabase
+        .from('quizzes')
+        .select('genre')
+        .order('created_at', { ascending: false });
+
+      const unique = Array.from(new Set((genres || []).map(g => g.genre))).slice(0, 50);
+      genreSelect.innerHTML = "";
+      const optAll = document.createElement('option');
+      optAll.value = "";
+      optAll.textContent = "すべてのジャンル";
+      genreSelect.appendChild(optAll);
+      unique.forEach(g => {
+        const o = document.createElement('option');
+        o.value = g;
+        o.textContent = g;
+        genreSelect.appendChild(o);
+      });
+
+      await refreshQuizList();
+    }
+
+    async function refreshQuizList() {
+      quizList.innerHTML = "";
+      const { data, error } = await supabase
+        .from('quizzes')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        quizList.innerHTML = `<li class="small">一覧取得エラー: ${error.message}</li>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        quizList.innerHTML = `<li class="small">公開されているクイズがありません</li>`;
+        return;
+      }
+      data.forEach(q => {
+        const li = document.createElement('li');
+        li.innerHTML = `<div><strong>${escapeHtml(q.title)}</strong><div class="small">${escapeHtml(q.genre)}</div></div>`;
+        const btns = document.createElement('div');
+        const play = document.createElement('button');
+        play.textContent = "プレイ";
+        play.addEventListener('click', () => startQuizById(q.id, q.title));
+        const copy = document.createElement('button');
+        copy.textContent = "コピー";
+        copy.className = "ghost";
+        copy.style.marginLeft = "8px";
+        copy.addEventListener('click', () => {
+          navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/?$/, '/') }quiz/?id=${q.id}`);
+          alert('クイズURLをコピーしました');
+        });
+        btns.appendChild(play);
+        btns.appendChild(copy);
+        li.appendChild(btns);
+        quizList.appendChild(li);
+      });
+    }
+
+    // 新規作成 UI
+    newBtn.addEventListener('click', () => {
+      mainControls.style.display = 'none';
+      creatorCard.style.display = 'block';
+      questionsContainer.innerHTML = '';
+      quizTitle.value = '';
+      quizGenre.value = '';
+      addQuestion(); // 最低1問
+    });
+
+    cancelCreateBtn.addEventListener('click', () => {
+      creatorCard.style.display = 'none';
+      mainControls.style.display = 'block';
+    });
+
+    addQuestionBtn.addEventListener('click', addQuestion);
+
+    function addQuestion(pref = {}) {
+      const idx = questionsContainer.children.length;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card';
+      wrapper.style.marginBottom = '8px';
+      wrapper.innerHTML = `
+        <label>問題 ${idx + 1}</label>
+        <input class="qtext" placeholder="問題文" value="${escapeAttr(pref.text||'')}" />
+        <label>選択肢（カンマ区切り）</label>
+        <input class="qchoices" placeholder="選択肢A,選択肢B,選択肢C" value="${escapeAttr((pref.choices||[]).join(','))}" />
+        <label>正解インデックス（0始まり）</label>
+        <input class="qanswer" placeholder="0" value="${escapeAttr(pref.answer_index!=null?String(pref.answer_index):'0')}" />
+        <div style="margin-top:8px" class="row">
+          <button class="removeBtn ghost">削除</button>
+        </div>
+      `;
+      questionsContainer.appendChild(wrapper);
+      wrapper.querySelector('.removeBtn').addEventListener('click', () => wrapper.remove());
+    }
+
+    // 保存
+    saveQuizBtn.addEventListener('click', async () => {
+      const title = quizTitle.value.trim();
+      const genre = quizGenre.value.trim() || '未分類';
+      if (!title) return alert('タイトルを入力してください');
+      const qEls = Array.from(questionsContainer.children);
+      if (qEls.length === 0) return alert('問題を1つ以上追加してください');
+
+      // トランザクション的にまず quizzes を作り questions を挿入
+      const { data: quizData, error: quizErr } = await supabase
+        .from('quizzes')
+        .insert([{ title, genre }])
+        .select()
+        .single();
+
+      if (quizErr) return alert('クイズ作成エラー: ' + quizErr.message);
+      const quiz_id = quizData.id;
+
+      const questionsPayload = [];
+      for (const el of qEls) {
+        const text = el.querySelector('.qtext').value.trim();
+        const choicesRaw = el.querySelector('.qchoices').value.trim();
+        const answerIndex = parseInt(el.querySelector('.qanswer').value.trim() || '0', 10);
+        if (!text || !choicesRaw) continue;
+        const choices = choicesRaw.split(',').map(s => s.trim()).filter(Boolean);
+        questionsPayload.push({
+          quiz_id,
+          text,
+          choices,
+          answer_index: isNaN(answerIndex) ? 0 : answerIndex
+        });
+      }
+
+      if (questionsPayload.length === 0) {
+        // rollback: delete quiz
+        await supabase.from('quizzes').delete().eq('id', quiz_id);
+        return alert('有効な問題がありませんでした。保存を中止しました');
+      }
+
+      const { error: qErr } = await supabase.from('questions').insert(questionsPayload);
+      if (qErr) {
+        alert('問題保存エラー: ' + qErr.message);
+        return;
+      }
+
+      alert('クイズを保存しました');
+      creatorCard.style.display = 'none';
+      mainControls.style.display = 'block';
+      await loadGenresAndList();
+    });
+
+    // クイズ開始（ランダム抽出）
+    startBtn.addEventListener('click', async () => {
+      const genre = genreSelect.value;
+      const count = parseInt(countSelect.value, 10) || 3;
+      // ジャンル指定があればそのジャンルのクイズをランダムに1つ選ぶ
+      const { data: quizzes } = await supabase
+        .from('quizzes')
+        .select('*')
+        .eq(genre ? 'genre' : 'genre', genre || undefined)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!quizzes || quizzes.length === 0) return alert('該当するクイズがありません');
+      // ランダムに1つ選ぶ
+      const q = quizzes[Math.floor(Math.random() * quizzes.length)];
+      startQuizById(q.id, q.title, count);
+    });
+
+    async function startQuizById(quizId, title, count = null) {
+      // 質問を取得
+      const { data: questions } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('quiz_id', quizId);
+
+      if (!questions || questions.length === 0) return alert('問題が見つかりません');
+
+      let pool = questions;
+      if (count && pool.length > count) {
+        pool = shuffleArray(pool).slice(0, count);
+      } else {
+        pool = shuffleArray(pool);
+      }
+
+      // UI 表示
+      mainControls.style.display = 'none';
+      creatorCard.style.display = 'none';
+      playCard.style.display = 'block';
+      playTitle.textContent = title;
+      questionsArea.innerHTML = '';
+      playResult.textContent = '';
+
+      pool.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'question';
+        div.innerHTML = `<div><strong>Q${i+1}.</strong> ${escapeHtml(q.text)}</div>`;
+        const choices = q.choices;
+        choices.forEach((c, idx) => {
+          const id = `q_${i}_c_${idx}`;
+          const radio = document.createElement('label');
+          radio.className = 'choice';
+          radio.innerHTML = `<input type="radio" name="q_${i}" value="${idx}" /> ${escapeHtml(c)}`;
+          div.appendChild(radio);
+        });
+        // store answer index on element
+        div.dataset.answer = q.answer_index;
+        questionsArea.appendChild(div);
+      });
+
+      // submit handler closure
+      submitAnswersBtn.onclick = async () => {
+        const qs = Array.from(questionsArea.querySelectorAll('.question'));
+        let score = 0;
+        qs.forEach((el, i) => {
+          const selected = el.querySelector('input[type=radio]:checked');
+          const chosen = selected ? parseInt(selected.value, 10) : null;
+          const correct = parseInt(el.dataset.answer, 10);
+          if (chosen === correct) score++;
+        });
+        playResult.textContent = `スコア： ${score} / ${qs.length}`;
+
+        // 保存（results テーブル）
+        await supabase.from('results').insert([{ quiz_id: quizId, score, total: qs.length }]);
+      };
+
+      backBtn.onclick = () => {
+        playCard.style.display = 'none';
+        mainControls.style.display = 'block';
+      };
+    }
+
+    // ユーティリティ
+    function escapeHtml(s) {
+      if (!s) return '';
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function escapeAttr(s) {
+      return (s||'').replace(/"/g, '&quot;');
+    }
+    function shuffleArray(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // 初回ロード
+    (async () => {
+      try {
+        await loadGenresAndList();
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+
+    refreshBtn.addEventListener('click', refreshQuizList);
+  </script>
 </body>
 </html>
