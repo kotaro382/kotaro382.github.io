@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ジャンル別・長文穴埋め多肢選択アプリ</title>
+<title>解説付き・長文穴埋め多肢選択アプリ</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 body { font-family: sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f4f6f9; color: #333; line-height: 1.6; }
@@ -37,11 +37,14 @@ button:hover { background-color: #27ae60; }
 .genre-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #eee; background: #fff; margin-bottom: 4px; border-radius: 4px; }
 .delete-btn { background-color: #e74c3c; padding: 5px 10px; font-size: 13px; }
 .delete-btn:hover { background-color: #c0392b; }
+
+/* クイズ回答後の解説ボックスのスタイル（!importantで文字色固定） */
+.explanation-box { margin-top: 8px; padding: 12px; background: #fffde7; border-left: 4px solid #f1c40f; font-size: 15px; color: #444 !important; border-radius: 4px; line-height: 1.5; font-weight: normal; }
 </style>
 </head>
 <body>
 
-<h1>📚 長文穴埋め一括クイズ</h1>
+<h1>📚 クイズ！！！！！！！！！！！！</h1>
 
 <div class="tab-container">
   <button id="tab-quiz" class="tab-btn active" onclick="switchView('quiz')">🎯 クイズに挑戦</button>
@@ -86,8 +89,7 @@ button:hover { background-color: #27ae60; }
         <button onclick="registerGenre()" style="white-space: nowrap;">ジャンルを追加</button>
       </div>
       
-      <div id="genre-list-admin" style="margin-top: 15px; max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa;">
-        </div>
+      <div id="genre-list-admin" style="margin-top: 15px; max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa;"></div>
     </div>
 
     <div class="card">
@@ -102,9 +104,15 @@ button:hover { background-color: #27ae60; }
       <p style="font-size: 14px; color: #666; margin: 4px 0;">問題にしたい部分を <b>【単語】</b> のようにカッコで囲んで入力してください。</p>
       <textarea id="passage-input" placeholder="例：明確な幾何学形態や空間を実現しようとする造形運動「【デ・ステイル】」の構成原理に基づき、【無彩色】と青・赤・黄の三原色とで鮮やかに彩魚された面と線の要素が組合わされている。"></textarea>
       
-      <button onclick="registerPassage()" style="margin-top: 15px;">文章を登録する</button>
-      <button class="auth-btn" onclick="logout()" style="margin-top: 15px; background-color: #95a5a6;">ログアウト</button>
-      <p id="register-msg"></p>
+      <button type="button" class="nav-btn" onclick="generateExplanationFields()" style="margin-top: 10px; width: 100%; background-color: #e67e22;">① 穴埋めワードを抽出して解説欄を作る</button>
+      
+      <div id="explanation-inputs-container" style="margin-top: 15px;"></div>
+      
+      <hr style="margin: 25px 0; border: 0; border-top: 1px dashed #ccc;">
+      
+      <button onclick="registerPassage()" style="width: 100%;">② 文章と解説をまとめて登録する</button>
+      <button class="auth-btn" onclick="logout()" style="margin-top: 15px; background-color: #95a5a6; width: 100%;">ログアウト</button>
+      <p id="register-msg" style="text-align: center; font-weight: bold; margin-top: 10px;"></p>
     </div>
 
   </div>
@@ -120,9 +128,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Xg497Gg0I1FLsIlY98fxKw_MLHJMjyj';
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let allPassages = [];
-let allGenres = []; // ジャンルマスターを保持する配列
+let allGenres = [];
 
-// 画面切り替えロジック
 function switchView(viewName) {
   const viewQuiz = document.getElementById('view-quiz');
   const viewAdmin = document.getElementById('view-admin');
@@ -142,41 +149,34 @@ function switchView(viewName) {
   }
 }
 
-// ジャンル一覧のUIおよび各種ドロップダウンの更新
 function updateGenreUI() {
-  // 1. クイズ画面のドロップダウン更新
   const quizSelect = document.getElementById('genre-select');
   const currentQuizValue = quizSelect.value || 'all';
   quizSelect.innerHTML = '<option value="all">🌍 全ジャンルから出題</option>';
 
-  // 2. 管理画面（問題登録）のドロップダウン更新
   const adminSelect = document.getElementById('genre-select-admin');
   adminSelect.innerHTML = allGenres.length === 0 
     ? '<option value="">-- 先にジャンルを追加してください --</option>' 
     : '<option value="">-- ジャンルを選択してください --</option>';
 
   allGenres.forEach(g => {
-    // クイズ用
     const optQuiz = document.createElement('option');
     optQuiz.value = g.name;
     optQuiz.textContent = g.name;
     quizSelect.appendChild(optQuiz);
 
-    // 管理用
     const optAdmin = document.createElement('option');
     optAdmin.value = g.name;
     optAdmin.textContent = g.name;
     adminSelect.appendChild(optAdmin);
   });
 
-  // クイズ選択状態の復元
   if ([...quizSelect.options].some(opt => opt.value === currentQuizValue)) {
     quizSelect.value = currentQuizValue;
   } else {
     quizSelect.value = 'all';
   }
 
-  // 3. 管理画面のジャンル一覧リスト（削除ボタン付き）の描画
   const listContainer = document.getElementById('genre-list-admin');
   listContainer.innerHTML = '';
   if (allGenres.length === 0) {
@@ -195,7 +195,6 @@ function updateGenreUI() {
   });
 }
 
-// --- ジャンルマスターの通信処理 ---
 async function fetchGenres() {
   try {
     const { data, error } = await supabaseClient.from('genres').select('*').order('name', { ascending: true });
@@ -233,24 +232,53 @@ async function deleteGenre(id, name) {
     return;
   }
 
-  // 1. 紐づく問題を削除
   const { error: pError } = await supabaseClient.from('passages').delete().eq('genre', name);
   if (pError) {
     alert("紐づく問題の削除に失敗しました: " + pError.message);
     return;
   }
 
-  // 2. ジャンルマスターから削除
   const { error: gError } = await supabaseClient.from('genres').delete().eq('id', id);
   if (gError) {
     alert("ジャンルの削除に失敗しました: " + gError.message);
   } else {
     await fetchGenres();
-    await fetchPassages(); // 問題プールも同期
+    await fetchPassages();
   }
 }
 
-// --- 既存の認証処理等 ---
+function generateExplanationFields() {
+  const content = document.getElementById('passage-input').value;
+  const container = document.getElementById('explanation-inputs-container');
+  container.innerHTML = '';
+
+  if (!content.includes('【') || !content.includes('】')) {
+    alert("問題文の中に、問題にしたい箇所（【単語】）を1つ以上入力してください。");
+    return;
+  }
+
+  const matches = content.match(/【(.*?)】/g);
+  if (!matches) return;
+
+  const words = [...new Set(matches.map(m => m.replace(/【|】/g, '')))];
+
+  const title = document.createElement('h3');
+  title.style.fontSize = '16px';
+  title.style.marginTop = '15px';
+  title.textContent = '💡 各キーワードの解説を入力（空欄でもOK）';
+  container.appendChild(title);
+
+  words.forEach(word => {
+    const div = document.createElement('div');
+    div.style.marginBottom = '12px';
+    div.innerHTML = `
+      <label style="font-size: 14px; font-weight: bold; color: #2c3e50;">▼「${word}」の解説</label>
+      <input type="text" class="explanation-word-input" data-word="${word}" placeholder="解答後に表示される解説文を入力してください">
+    `;
+    container.appendChild(div);
+  });
+}
+
 async function login() {
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
@@ -311,30 +339,33 @@ async function registerPassage() {
   const content = document.getElementById('passage-input').value;
   const msgEl = document.getElementById('register-msg');
   
-  if (!genre) {
-    alert("ジャンルを選択してください。");
+  if (!genre) { alert("ジャンルを選択してください。"); return; }
+  if (!content) { alert("文章を入力してください。"); return; }
+  
+  const expInputs = document.querySelectorAll('.explanation-word-input');
+  if (expInputs.length === 0 && (content.includes('【') && content.includes('】'))) {
+    alert("「① 穴埋めワードを抽出して解説欄を作る」ボタンを先に押して、解説欄を準備してください。");
     return;
   }
-  if (!content) {
-    alert("文章を入力してください。");
-    return;
-  }
-  if (!content.includes('【') || !content.includes('】')) {
-    alert("問題にする箇所を【単語】で囲んでください。");
-    return;
-  }
+
+  const explanationsObj = {};
+  expInputs.forEach(input => {
+    const word = input.getAttribute('data-word');
+    explanationsObj[word] = input.value.trim();
+  });
   
   const { data, error } = await supabaseClient
     .from('passages')
-    .insert([{ genre: genre, content: content }]);
+    .insert([{ genre: genre, content: content, explanations: explanationsObj }]);
     
   if (error) {
     msgEl.textContent = "エラー: " + error.message;
     msgEl.style.color = "red";
   } else {
-    msgEl.textContent = "長文を登録しました！";
+    msgEl.textContent = "長文と解説を登録しました！";
     msgEl.style.color = "green";
     document.getElementById('passage-input').value = '';
+    document.getElementById('explanation-inputs-container').innerHTML = '';
     await fetchPassages();
   }
 }
@@ -352,7 +383,7 @@ async function fetchPassages() {
 
 async function startPassageQuiz() {
   if (allPassages.length === 0) {
-    alert("まずは文章を登録してください。");
+    alert("まずは問題を登録してください。");
     return;
   }
 
@@ -365,7 +396,6 @@ async function startPassageQuiz() {
     genrePassages = allPassages.filter(p => p.genre === selectedGenre);
   }
 
-  // 選択されたジャンルにまだ問題がない場合の対応
   if (genrePassages.length === 0) {
     alert("選択されたジャンルには、まだ問題が1件も登録されていません。");
     return;
@@ -411,6 +441,21 @@ async function startPassageQuiz() {
     let choices = [correctWord, ...wrongChoices.slice(0, 3)];
     choices.sort(() => 0.5 - Math.random());
     
+    // 【重要】SupabaseからJSONが「文字列」で戻ってきた場合を想定した安全パース装置
+    let targetExplanations = targetPassage.explanations;
+    if (typeof targetExplanations === 'string') {
+      try {
+        targetExplanations = JSON.parse(targetExplanations);
+      } catch (e) {
+        targetExplanations = {};
+      }
+    }
+
+    // 該当ワードの解説を取得（古いデータや空欄登録だった場合は親切にメッセージを出す）
+    const explanationText = (targetExplanations && targetExplanations[correctWord]) 
+      ? targetExplanations[correctWord] 
+      : '（このキーワードには個別の解説が登録されていません）';
+
     const quizItem = document.createElement('div');
     quizItem.className = 'quiz-item';
     quizItem.innerHTML = `
@@ -425,25 +470,29 @@ async function startPassageQuiz() {
       const btn = document.createElement('button');
       btn.className = 'choice-btn';
       btn.textContent = choice;
-      btn.onclick = () => checkAnswer(btn, choice, correctWord, questionNumber);
+      btn.onclick = () => checkAnswer(btn, choice, correctWord, questionNumber, explanationText);
       grid.appendChild(btn);
     });
   });
   document.getElementById('quiz-area').style.display = 'block';
 }
 
-function checkAnswer(selectedBtn, selectedWord, correctWord, qNum) {
+function checkAnswer(selectedBtn, selectedWord, correctWord, qNum, explanation) {
   const grid = document.getElementById(`grid-${qNum}`);
   const status = document.getElementById(`status-${qNum}`);
   const buttons = grid.querySelectorAll('.choice-btn');
   buttons.forEach(btn => btn.disabled = true);
+  
+  // HTMLを構築して埋め込む（正解でも不正解でも必ず${explanationHTML}が入ります）
+  const explanationHTML = `<div class="explanation-box"><b>💡 解説：</b>${explanation}</div>`;
+
   if (selectedWord === correctWord) {
     selectedBtn.classList.add('correct');
-    status.textContent = "⭕ 正解！";
+    status.innerHTML = `⭕ 正解！${explanationHTML}`;
     status.style.color = "#2ecc71";
   } else {
     selectedBtn.classList.add('wrong');
-    status.textContent = `❌ 不正解... 正解は「${correctWord}」です。`;
+    status.innerHTML = `❌ 不正解... 正解は「${correctWord}」です。${explanationHTML}`;
     status.style.color = "#e74c3c";
     buttons.forEach(btn => {
       if (btn.textContent === correctWord) btn.classList.add('correct');
@@ -453,8 +502,8 @@ function checkAnswer(selectedBtn, selectedWord, correctWord, qNum) {
 
 window.onload = async function() {
   await checkUser();
-  await fetchGenres();   // ジャンルを最初に取得
-  await fetchPassages(); // 問題を次に取得
+  await fetchGenres();
+  await fetchPassages();
 };
 </script>
 </body>
