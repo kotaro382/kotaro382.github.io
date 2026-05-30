@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>解説付き・長文穴埋め多肢選択アプリ</title>
+<title>編集・削除機能付き・長文穴埋め多肢選択アプリ</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 body { font-family: sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f4f6f9; color: #333; line-height: 1.6; }
@@ -38,13 +38,13 @@ button:hover { background-color: #27ae60; }
 .delete-btn { background-color: #e74c3c; padding: 5px 10px; font-size: 13px; }
 .delete-btn:hover { background-color: #c0392b; }
 
-/* クイズ回答後の解説ボックスのスタイル（!importantで文字色固定） */
+/* クイズ回答後の解説ボックスのスタイル */
 .explanation-box { margin-top: 8px; padding: 12px; background: #fffde7; border-left: 4px solid #f1c40f; font-size: 15px; color: #444 !important; border-radius: 4px; line-height: 1.5; font-weight: normal; }
 </style>
 </head>
 <body>
 
-<h1>📚 クイズ！！！！！</h1>
+<h1>📚 長文穴埋め一括クイズ</h1>
 
 <div class="tab-container">
   <button id="tab-quiz" class="tab-btn active" onclick="switchView('quiz')">🎯 クイズに挑戦</button>
@@ -111,7 +111,17 @@ button:hover { background-color: #27ae60; }
       <hr style="margin: 25px 0; border: 0; border-top: 1px dashed #ccc;">
       
       <button onclick="registerPassage()" style="width: 100%;">② 文章と解説をまとめて登録する</button>
-      <button class="auth-btn" onclick="logout()" style="margin-top: 15px; background-color: #95a5a6; width: 100%;">ログアウト</button>
+    </div>
+
+    <div class="card">
+      <h2>🛠️ 登録済み問題の管理（編集・削除）</h2>
+      <label style="font-weight: bold;">ジャンルで絞り込み：</label>
+      <select id="genre-filter-admin" onchange="renderAdminPassageList()">
+        <option value="all">🌍 すべての問題を表示</option>
+      </select>
+      
+      <div id="admin-passage-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa;">
+        </div>
       <p id="register-msg" style="text-align: center; font-weight: bold; margin-top: 10px;"></p>
     </div>
 
@@ -149,6 +159,7 @@ function switchView(viewName) {
   }
 }
 
+// ドロップダウンUIの更新（管理用フィルターのドロップダウンも合わせて更新）
 function updateGenreUI() {
   const quizSelect = document.getElementById('genre-select');
   const currentQuizValue = quizSelect.value || 'all';
@@ -158,6 +169,12 @@ function updateGenreUI() {
   adminSelect.innerHTML = allGenres.length === 0 
     ? '<option value="">-- 先にジャンルを追加してください --</option>' 
     : '<option value="">-- ジャンルを選択してください --</option>';
+
+  const filterSelect = document.getElementById('genre-filter-admin');
+  const currentFilterValue = filterSelect ? filterSelect.value : 'all';
+  if (filterSelect) {
+    filterSelect.innerHTML = '<option value="all">🌍 すべての問題を表示</option>';
+  }
 
   allGenres.forEach(g => {
     const optQuiz = document.createElement('option');
@@ -169,12 +186,27 @@ function updateGenreUI() {
     optAdmin.value = g.name;
     optAdmin.textContent = g.name;
     adminSelect.appendChild(optAdmin);
+
+    if (filterSelect) {
+      const optFilter = document.createElement('option');
+      optFilter.value = g.name;
+      optFilter.textContent = g.name;
+      filterSelect.appendChild(optFilter);
+    }
   });
 
   if ([...quizSelect.options].some(opt => opt.value === currentQuizValue)) {
     quizSelect.value = currentQuizValue;
   } else {
     quizSelect.value = 'all';
+  }
+
+  if (filterSelect) {
+    if ([...filterSelect.options].some(opt => opt.value === currentFilterValue)) {
+      filterSelect.value = currentFilterValue;
+    } else {
+      filterSelect.value = 'all';
+    }
   }
 
   const listContainer = document.getElementById('genre-list-admin');
@@ -279,6 +311,178 @@ function generateExplanationFields() {
   });
 }
 
+// 【新規追加】問題一覧を動的に生成するロジック
+function renderAdminPassageList() {
+  const filterGenre = document.getElementById('genre-filter-admin').value;
+  const listContainer = document.getElementById('admin-passage-list');
+  listContainer.innerHTML = '';
+
+  const filtered = filterGenre === 'all' 
+    ? allPassages 
+    : allPassages.filter(p => p.genre === filterGenre);
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = '<p style="color: #999; font-size: 14px; text-align: center; margin: 20px 0;">該当する問題は登録されていません。</p>';
+    return;
+  }
+
+  filtered.forEach(p => {
+    const itemDiv = document.createElement('div');
+    itemDiv.id = `passage-admin-item-${p.id}`;
+    itemDiv.style.border = '1px solid #ddd';
+    itemDiv.style.padding = '15px';
+    itemDiv.style.borderRadius = '6px';
+    itemDiv.style.marginBottom = '12px';
+    itemDiv.style.background = '#fff';
+
+    itemDiv.innerHTML = `
+      <div id="passage-view-${p.id}">
+        <span style="background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold;">${p.genre}</span>
+        <p style="margin: 10px 0; font-size: 14px; white-space: pre-wrap; color: #333; word-break: break-all;">${p.content}</p>
+        <div style="display: flex; gap: 8px; margin-top: 10px;">
+          <button onclick="openEditForm('${p.id}')" style="background-color: #3498db; font-size: 13px; padding: 6px 12px;">✏️ 編集する</button>
+          <button onclick="deletePassage('${p.id}')" class="delete-btn" style="font-size: 13px; padding: 6px 12px; margin:0;">❌ 削除</button>
+        </div>
+      </div>
+      <div id="passage-edit-${p.id}" style="display: none;"></div>
+    `;
+    listContainer.appendChild(itemDiv);
+  });
+}
+
+// 【新規追加】インライン編集フォームを開く
+function openEditForm(id) {
+  const p = allPassages.find(item => item.id == id);
+  if (!p) return;
+
+  document.getElementById(`passage-view-${id}`).style.display = 'none';
+  const editArea = document.getElementById(`passage-edit-${id}`);
+  editArea.style.display = 'block';
+
+  let genreOptions = '';
+  allGenres.forEach(g => {
+    genreOptions += `<option value="${g.name}" ${g.name === p.genre ? 'selected' : ''}>${g.name}</option>`;
+  });
+
+  editArea.innerHTML = `
+    <h3 style="font-size: 16px; margin-bottom: 10px; color: #e67e22;">✏️ 問題の編集</h3>
+    
+    <label style="font-weight: bold; font-size: 13px;">ジャンルを変更：</label>
+    <select id="edit-genre-${id}" style="font-size: 14px; padding: 6px;">${genreOptions}</select>
+
+    <label style="font-weight: bold; font-size: 13px; display: block; margin-top: 10px;">問題文を変更：</label>
+    <textarea id="edit-content-${id}" style="height: 100px; font-size: 14px;">${p.content}</textarea>
+    
+    <button type="button" class="nav-btn" onclick="generateEditExplanationFields('${id}')" style="margin-top: 5px; font-size: 13px; padding: 6px 12px; background-color: #e67e22; width: 100%;">① 本文の【】から解説欄を更新・再生成</button>
+    
+    <div id="edit-explanation-container-${id}" style="margin-top: 10px; background: #fdfefe; padding: 8px; border: 1px dashed #ccc; border-radius:4px;"></div>
+
+    <div style="display: flex; gap: 10px; margin-top: 15px;">
+      <button onclick="savePassageEdit('${id}')" style="background-color: #2ecc71; font-size: 14px; padding: 8px 16px; flex: 1;">💾 変更を保存</button>
+      <button onclick="closeEditForm('${id}')" style="background-color: #95a5a6; font-size: 14px; padding: 8px 16px; flex: 1;">キャンセル</button>
+    </div>
+  `;
+
+  // 初回の解説欄描画
+  generateEditExplanationFields(id, p.explanations);
+}
+
+// 【新規追加】編集フォーム用の解説入力欄生成ロジック（手動で叩かれた時は直前の入力を保持する）
+function generateEditExplanationFields(id, existingExplanations = null) {
+  const content = document.getElementById(`edit-content-${id}`).value;
+  const container = document.getElementById(`edit-explanation-container-${id}`);
+
+  const matches = content.match(/【(.*?)】/g);
+  if (!matches) {
+    container.innerHTML = '<p style="color: red; font-size: 13px; margin:0;">⚠️ 本文中に【単語】が見つかりません。</p>';
+    return;
+  }
+  const words = [...new Set(matches.map(m => m.replace(/【|】/g, '')))];
+
+  // すでに編集画面の入力欄に入力されている値を一時回収
+  const currentInputs = document.querySelectorAll(`.edit-explanation-word-input-${id}`);
+  const tempObj = {};
+  currentInputs.forEach(input => {
+    tempObj[input.getAttribute('data-word')] = input.value;
+  });
+
+  container.innerHTML = '';
+
+  let expObj = existingExplanations;
+  if (!expObj) {
+    // 既存データが渡されなかった（手動でボタンを押した）場合は、入力中の値(tempObj)を優先し、無ければDBの元データを引き継ぐ
+    const p = allPassages.find(item => item.id == id);
+    const originalObj = (p && p.explanations) ? (typeof p.explanations === 'string' ? JSON.parse(p.explanations) : p.explanations) : {};
+    expObj = Object.assign({}, originalObj, tempObj);
+  }
+
+  if (typeof expObj === 'string') {
+    try { expObj = JSON.parse(expObj); } catch (e) { expObj = {}; }
+  }
+  if (!expObj) expObj = {};
+
+  words.forEach(word => {
+    const div = document.createElement('div');
+    div.style.marginBottom = '8px';
+    const currentVal = expObj[word] || '';
+    div.innerHTML = `
+      <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">▼「${word}」の解説</label>
+      <input type="text" class="edit-explanation-word-input-${id}" data-word="${word}" value="${currentVal}" placeholder="解説文を入力してください" style="padding: 6px; font-size: 14px; margin: 2px 0;">
+    `;
+    container.appendChild(div);
+  });
+}
+
+// 【新規追加】編集フォームを閉じる
+function closeEditForm(id) {
+  document.getElementById(`passage-view-${id}`).style.display = 'block';
+  document.getElementById(`passage-edit-${id}`).style.display = 'none';
+  document.getElementById(`passage-edit-${id}`).innerHTML = '';
+}
+
+// 【新規追加】編集したデータをSupabaseに保存する
+async function savePassageEdit(id) {
+  const genre = document.getElementById(`edit-genre-${id}`).value;
+  const content = document.getElementById(`edit-content-${id}`).value;
+
+  if (!genre) { alert("ジャンルを選択してください。"); return; }
+  if (!content) { alert("文章を入力してください。"); return; }
+  if (!content.includes('【') || !content.includes('】')) { alert("問題にする箇所を【単語】で囲んでください。"); return; }
+
+  const expInputs = document.querySelectorAll(`.edit-explanation-word-input-${id}`);
+  const explanationsObj = {};
+  expInputs.forEach(input => {
+    const word = input.getAttribute('data-word');
+    explanationsObj[word] = input.value.trim();
+  });
+
+  const { error } = await supabaseClient
+    .from('passages')
+    .update({ genre: genre, content: content, explanations: explanationsObj })
+    .eq('id', id);
+
+  if (error) {
+    alert("修正の保存に失敗しました: " + error.message);
+  } else {
+    alert("問題を修正しました！");
+    await fetchPassages(); // これにより再取得＆一覧の再描画が走ります
+  }
+}
+
+// 【新規追加】問題を1件削除する
+async function deletePassage(id) {
+  if (!confirm("このクイズ問題を削除してもよろしいですか？\n(この操作は取り消せません)")) {
+    return;
+  }
+
+  const { error } = await supabaseClient.from('passages').delete().eq('id', id);
+  if (error) {
+    alert("問題の削除に失敗しました: " + error.message);
+  } else {
+    await fetchPassages();
+  }
+}
+
 async function login() {
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
@@ -375,6 +579,7 @@ async function fetchPassages() {
     const { data, error } = await supabaseClient.from('passages').select('*');
     if (data) {
       allPassages = data;
+      renderAdminPassageList(); // 【追加】データ取得時に管理画面用の一覧も同期
     }
   } catch (e) {
     console.error(e);
@@ -383,7 +588,7 @@ async function fetchPassages() {
 
 async function startPassageQuiz() {
   if (allPassages.length === 0) {
-    alert("まずは問題を登録してください。");
+    alert("まずは文章を登録してください。");
     return;
   }
 
@@ -441,7 +646,6 @@ async function startPassageQuiz() {
     let choices = [correctWord, ...wrongChoices.slice(0, 3)];
     choices.sort(() => 0.5 - Math.random());
     
-    // 【重要】SupabaseからJSONが「文字列」で戻ってきた場合を想定した安全パース装置
     let targetExplanations = targetPassage.explanations;
     if (typeof targetExplanations === 'string') {
       try {
@@ -451,7 +655,6 @@ async function startPassageQuiz() {
       }
     }
 
-    // 該当ワードの解説を取得（古いデータや空欄登録だった場合は親切にメッセージを出す）
     const explanationText = (targetExplanations && targetExplanations[correctWord]) 
       ? targetExplanations[correctWord] 
       : '（このキーワードには個別の解説が登録されていません）';
@@ -483,7 +686,6 @@ function checkAnswer(selectedBtn, selectedWord, correctWord, qNum, explanation) 
   const buttons = grid.querySelectorAll('.choice-btn');
   buttons.forEach(btn => btn.disabled = true);
   
-  // HTMLを構築して埋め込む（正解でも不正解でも必ず${explanationHTML}が入ります）
   const explanationHTML = `<div class="explanation-box"><b>💡 解説：</b>${explanation}</div>`;
 
   if (selectedWord === correctWord) {
